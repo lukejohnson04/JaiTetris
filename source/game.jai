@@ -25,9 +25,7 @@ piece_preview_y_level : int;
 
 current_piece : [16]int;
 
-level := 0;
 score := 0;
-
 
 Piece_Type :: enum {
     O;
@@ -39,7 +37,7 @@ Piece_Type :: enum {
     T;
 }
 
-pieces : [#run enum_highest_value(Piece_Type) + 1] [16]int;
+pieces : [#run enum_highest_value(Piece_Type) + 1][16]int;
 piece_pos_dimensions : [#run enum_highest_value(Piece_Type) + 1] int;
 
 init_textures :: () {
@@ -88,6 +86,10 @@ on_startup :: () {
         random_seed(<< (cast(*u64) *seed));
     }
 
+    // Note: I was really struggling with 2d arrays at first lol
+    // so this is pretty awkward... I understand how I can do 2D
+    // arrays now but I would really appreciate feedback on a more
+    // elegant way to initialize the piece data!
     pieces[Piece_Type.O] = .[
         0,0,0,0,
         0,1,1,0,
@@ -145,89 +147,21 @@ on_startup :: () {
     ];
     piece_pos_dimensions[Piece_Type.T] = 3;
 
-    error := glGetError();
-    if error != GL_NO_ERROR {
-        print("wow: %\n",error);
-        return;
-    }
-
     // init font data
-    {
-        ft: FT_Library;
-        if FT_Init_FreeType(*ft) {
-            print("Failed to init freetype!\n");
-            return;
-        }
-
-        face: FT_Face;
-        if FT_New_Face(ft, "data/m5x7.ttf", 0, *face) {
-            print("Failed to load font face!\n");
-            return;
-        }
-
-        FT_Set_Pixel_Sizes(face, 0, 48);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, face.glyph.bitmap.pitch);
-
-        for 0..127 {
-            if FT_Load_Char(face, xx it, FT_LOAD_RENDER) {
-                print("Failed to load % char!\n", it);
-                continue;
-            }
-
-            texture: GLuint;
-            glGenTextures(1, *texture);
-            glBindTexture(GL_TEXTURE_2D, texture);
-            if glGetError() != GL_NO_ERROR {
-                print("Error when creating glyph: %\n", glGetError());
-                return;
-            }
-
-            glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_RED,
-                face.glyph.bitmap.width,
-                face.glyph.bitmap.rows,
-                0,
-                GL_RED,
-                GL_UNSIGNED_BYTE,
-                face.glyph.bitmap.buffer
-            );
-
-            error = glGetError();
-            if error != GL_NO_ERROR {
-                print("Error when generating texture: %\n", error);
-                return;
-            }
-
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-            character := *characters[it];
-            character.texture = texture;
-            character.size = .{face.glyph.bitmap.width, face.glyph.bitmap.rows};
-            character.bearing = .{face.glyph.bitmap_left, face.glyph.bitmap_top};
-            character.advance = xx face.glyph.advance.x;
-        }
-        FT_Done_Face(face);
-        FT_Done_FreeType(ft);
-    }
+    load_font_data();
 
     reset_game();
 }
 
 gain_score_for_line_clear :: (lines_cleared: int) {
-    mult := 0;
+    increment := 0;
     if lines_cleared == {
-        case 1; mult = 40;
-        case 2; mult = 100;
-        case 3; mult = 300;
-        case 4; mult = 1200;
+        case 1; increment = 40;
+        case 2; increment = 100;
+        case 3; increment = 300;
+        case 4; increment = 1200;
     }
-    score += mult * (level + 1);
+    score += increment;
 }
 
 FRAME_TIME : float32 : 1.0 / 60.0;
@@ -553,7 +487,7 @@ update_and_render :: (running : *bool) {
             if tiles[col][row] != -1 {
                 src : Rect = .{cast(float32)tiles[col][row] * 16, 0, 16, 16};
                 dest : Rect = .{cast(float32)col * TILE_SIZE, cast(float32)row * TILE_SIZE, TILE_SIZE, TILE_SIZE};
-                draw_texture(src, dest, *texture_block);
+                draw_texture(src, dest, .{texture_block.width, texture_block.height});
             }
         }
     }
@@ -571,7 +505,7 @@ update_and_render :: (running : *bool) {
         coord := v2i.{current_piece_pos.x + col, piece_preview_y_level + row};
         src : Rect = .{cast(float32)current_piece_type * 16, 0, 16, 16};
         dest : Rect = .{cast(float32)coord.x * TILE_SIZE, cast(float32)coord.y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
-        draw_texture(src, dest, *texture_block);
+        draw_texture(src, dest, .{texture_block.width, texture_block.height});
     }
 
     glUniform4f(loc_colorMod, 1, 1, 1, 1);
@@ -587,14 +521,17 @@ update_and_render :: (running : *bool) {
             
             src : Rect = .{cast(float32)current_piece_type * 16, 0, 16, 16};
             dest : Rect = .{cast(float32)coord.x * TILE_SIZE, cast(float32)coord.y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
-            draw_texture(src, dest, *texture_block);
+            draw_texture(src, dest, .{texture_block.width, texture_block.height});
         }
     }
 
     // draw gui
     glBindTexture(GL_TEXTURE_2D, texture_gui.gl_handle);
     glUniform1i(loc_texture, 0);
-    draw_texture(Rect.{0, 0, 160, 640}, Rect.{WINDOW_WIDTH-160, 0, 160, 640}, *texture_gui);
+    gui_size := v2i.{texture_gui.width, texture_gui.height};
+    draw_texture(Rect.{0, 0, xx gui_size.x, xx gui_size.y},
+                Rect.{WINDOW_WIDTH-160, 0, xx gui_size.x, xx gui_size.y},
+                gui_size);
 
     // draw next piece and hold piece preview
     glBindTexture(GL_TEXTURE_2D, texture_block.gl_handle);
@@ -613,7 +550,7 @@ update_and_render :: (running : *bool) {
 
             src : Rect = .{cast(float32)next_piece_type * 16, 0, 16, 16};
             dest : Rect = .{cast(float32)preview_pos.x, cast(float32)preview_pos.y, 16, 16};
-            draw_texture(src, dest, *texture_block);
+            draw_texture(src, dest, .{texture_block.width, texture_block.height});
         }
     }
 
@@ -630,11 +567,11 @@ update_and_render :: (running : *bool) {
 
             src : Rect = .{cast(float32)hold_piece_type * 16, 0, 16, 16};
             dest : Rect = .{cast(float32)preview_pos.x, cast(float32)preview_pos.y, 16, 16};
-            draw_texture(src, dest, *texture_block);
+            draw_texture(src, dest, .{texture_block.width, texture_block.height});
         }
     }
 
-    // Draw text
+    // Draw score
     glUseProgram(text_shader);
     glUniformMatrix4fv(glGetUniformLocation(text_shader, "projection"), 1, GL_FALSE, xx *mat_projection);
     glUniformMatrix4fv(glGetUniformLocation(text_shader, "view"), 1, GL_FALSE, xx *mat_view);
@@ -642,12 +579,8 @@ update_and_render :: (running : *bool) {
     glUniform4f(glGetUniformLocation(text_shader, "color"), 1, 1, 1, 1);
     score_string := sprint("%", score);
     draw_text(score_string, .{400, 200});
-    glUseProgram(texture_shader);
+
     SDL_GL_SwapWindow(window);
     sleep_till_next_update();
     reset_temporary_storage();
 }
-
-#import "Math";
-#load "render/render.jai";
-#import "freetype-2.12.1";

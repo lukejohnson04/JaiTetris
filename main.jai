@@ -1,6 +1,12 @@
 
 window : *SDL_Window;
+TILE_SIZE :: 32;
+WINDOW_WIDTH :: MAP_WIDTH * TILE_SIZE + 160;
+WINDOW_HEIGHT :: MAP_HEIGHT * TILE_SIZE;
+VSYNC :: true;
 
+// Simple entry point layer for the program.
+// The main game loop is in update_and_render in game.jai
 main :: () {
     if SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0 {
         print("Failed to initialize SDL!\n");
@@ -54,11 +60,6 @@ main :: () {
     SDL_Quit();
 }
 
-TILE_SIZE :: 32;
-WINDOW_WIDTH :: MAP_WIDTH * TILE_SIZE + 160;
-WINDOW_HEIGHT :: MAP_HEIGHT * TILE_SIZE;
-VSYNC :: true;
-
 #import "Windows";
 #import "Basic";
 #import "String";
@@ -67,6 +68,7 @@ VSYNC :: true;
 #import "File";
 #import "Simp";
 #import "Random";
+#import "Math";
 
 #import "freetype-2.12.1";
 
@@ -75,3 +77,4 @@ VSYNC :: true;
 #load "source/game.jai";
 #load "source/render/shader.jai";
 #load "source/render/text.jai";
+#load "source/render/render.jai";
